@@ -20,6 +20,13 @@ testdata/
   tcga/             TCGA GDC MAF files for validation
 ```
 
+## Setup
+
+```bash
+# Enable pre-commit hooks (enforces complete TCGA reports)
+git config core.hooksPath .githooks
+```
+
 ## Commands
 
 ```bash
