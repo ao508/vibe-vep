@@ -1,6 +1,6 @@
 # Annotation Sources Report
 
-Generated: 2026-02-28 21:04 UTC  
+Generated: 2026-03-01 04:57 UTC  
 GENCODE transcripts: 254070  
 AlphaMissense variants in database: 71697556  
 Workers: 4 (GOMAXPROCS)
@@ -22,11 +22,11 @@ Workers: 4 (GOMAXPROCS)
 
 | Study | Variants | Base Time | AM Lookup Time | AM Overhead | Lookups/sec |
 |-------|----------|-----------|----------------|-------------|-------------|
-| blca_tcga_gdc | 115850 | 51.2s | 6.976s | 13.6% | 10886 |
-| brca_tcga_gdc | 89012 | 20.321s | 6.444s | 31.7% | 8954 |
-| chol_tcga_gdc | 3764 | 851ms | 2.25s | 264.4% | 1038 |
-| coad_tcga_gdc | 244552 | 34.441s | 8.975s | 26.1% | 14334 |
-| gbm_tcga_gdc | 54870 | 10.215s | 4.881s | 47.8% | 6696 |
-| luad_tcga_gdc | 190868 | 32.488s | 7.845s | 24.1% | 15329 |
-| skcm_tcga_gdc | 353450 | 51.329s | 12.747s | 24.8% | 16033 |
-| **Total** | **1052366** | **3m20.845s** | **50.118s** | **25.0%** | **12409** |
+| blca_tcga_gdc | 115850 | 19.151s | 5.03s | 26.3% | 15098 |
+| brca_tcga_gdc | 89012 | 15.912s | 4.447s | 27.9% | 12977 |
+| chol_tcga_gdc | 3764 | 679ms | 2.303s | 339.2% | 1015 |
+| coad_tcga_gdc | 244552 | 30.406s | 7.233s | 23.8% | 17787 |
+| gbm_tcga_gdc | 54870 | 8.464s | 3.649s | 43.1% | 8957 |
+| luad_tcga_gdc | 190868 | 28.32s | 6.491s | 22.9% | 18526 |
+| skcm_tcga_gdc | 353450 | 44.148s | 9.31s | 21.1% | 21953 |
+| **Total** | **1052366** | **2m27.08s** | **38.461s** | **26.2%** | **16170** |
