@@ -17,6 +17,8 @@ params:
   github_project_repo: https://github.com/inodb/vibe-vep
   github_branch: main
 
+  offlineSearch: true
+
   ui:
     navbar_logo: false
     sidebar_menu_compact: true
