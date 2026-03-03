@@ -15,8 +15,9 @@ func NewSource(cgl CancerGeneList) *Source {
 	return &Source{cgl: cgl}
 }
 
-func (s *Source) Name() string    { return "oncokb" }
-func (s *Source) Version() string { return "cancerGeneList.tsv" }
+func (s *Source) Name() string                   { return "oncokb" }
+func (s *Source) Version() string                 { return "cancerGeneList.tsv" }
+func (s *Source) MatchLevel() annotate.MatchLevel { return annotate.MatchGene }
 
 func (s *Source) Columns() []annotate.ColumnDef {
 	return []annotate.ColumnDef{

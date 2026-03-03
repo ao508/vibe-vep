@@ -99,7 +99,7 @@ func TestAnnotationSourcesBenchmark(t *testing.T) {
 		if err != nil {
 			t.Fatalf("load hotspots: %v", err)
 		}
-		t.Logf("loaded hotspots: %d genes, %d positions", ctx.hsStore.GeneCount(), ctx.hsStore.HotspotCount())
+		t.Logf("loaded hotspots: %d transcripts, %d positions", ctx.hsStore.TranscriptCount(), ctx.hsStore.HotspotCount())
 	} else {
 		t.Logf("hotspots file not found, skipping")
 	}
@@ -204,12 +204,16 @@ func benchmarkStudy(t *testing.T, mafFile string, c *cache.Cache, ctx *sourcesCt
 			break
 		}
 
-		// Hotspot lookup.
+		// Hotspot lookup (by transcript + protein position).
 		if ctx.hsStore != nil {
 			for _, a := range vepAnns {
-				if a.ProteinPosition > 0 && a.GeneName != "" {
+				if a.ProteinPosition > 0 && a.TranscriptID != "" {
+					txID := a.TranscriptID
+					if i := strings.IndexByte(txID, '.'); i >= 0 {
+						txID = txID[:i]
+					}
 					hsChecked++
-					if h, ok := ctx.hsStore.Lookup(a.GeneName, a.ProteinPosition); ok {
+					if h, ok := ctx.hsStore.Lookup(txID, a.ProteinPosition); ok {
 						hsHits++
 						hsTypeCounts[h.Type]++
 					}
@@ -326,7 +330,7 @@ func writeAnnotationSourcesReport(t *testing.T, path string, results []sourceStu
 	sb.WriteString(fmt.Sprintf("GENCODE transcripts: %d  \n", transcriptCount))
 	sb.WriteString(fmt.Sprintf("AlphaMissense variants in database: %d  \n", ctx.amCount))
 	if ctx.hsStore != nil {
-		sb.WriteString(fmt.Sprintf("Cancer Hotspots: %d genes, %d positions  \n", ctx.hsStore.GeneCount(), ctx.hsStore.HotspotCount()))
+		sb.WriteString(fmt.Sprintf("Cancer Hotspots: %d transcripts, %d positions  \n", ctx.hsStore.TranscriptCount(), ctx.hsStore.HotspotCount()))
 	}
 	if ctx.cvStore != nil {
 		sb.WriteString(fmt.Sprintf("ClinVar variants: %d  \n", ctx.cvStore.Count()))

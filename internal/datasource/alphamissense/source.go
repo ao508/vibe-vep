@@ -24,8 +24,9 @@ func NewSource(store *Store) *Source {
 	return &Source{store: store}
 }
 
-func (s *Source) Name() string    { return "alphamissense" }
-func (s *Source) Version() string { return "2023" }
+func (s *Source) Name() string                   { return "alphamissense" }
+func (s *Source) Version() string                 { return "2023" }
+func (s *Source) MatchLevel() annotate.MatchLevel { return annotate.MatchGenomic }
 
 func (s *Source) Columns() []annotate.ColumnDef {
 	return []annotate.ColumnDef{

@@ -536,18 +536,22 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		if err != nil {
 			logger.Warn("could not load hotspots data", zap.String("path", hotspotsPath), zap.Error(err))
 		} else {
-			logger.Info("loaded cancer hotspots", zap.Int("genes", store.GeneCount()), zap.Int("hotspots", store.HotspotCount()))
+			logger.Info("loaded cancer hotspots", zap.Int("transcripts", store.TranscriptCount()), zap.Int("hotspots", store.HotspotCount()))
 			sources = append(sources, hotspots.NewSource(store))
 		}
 	}
 
-	// SIGNAL
+	// SIGNAL (GRCh37 only — no liftover support yet)
 	if viper.GetBool("annotations.signal") {
-		sigStore, err := loadSignal(logger, cacheDir)
-		if err != nil {
-			logger.Warn("could not load SIGNAL data", zap.Error(err))
+		if assembly != "grch37" {
+			logger.Warn("SIGNAL data uses GRCh37 coordinates, skipping for assembly", zap.String("assembly", assembly))
 		} else {
-			sources = append(sources, signal.NewSource(sigStore))
+			sigStore, err := loadSignal(logger, cacheDir)
+			if err != nil {
+				logger.Warn("could not load SIGNAL data", zap.Error(err))
+			} else {
+				sources = append(sources, signal.NewSource(sigStore))
+			}
 		}
 	}
 

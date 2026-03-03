@@ -290,5 +290,6 @@ type testSource struct {
 
 func (s *testSource) Name() string                                         { return s.name }
 func (s *testSource) Version() string                                      { return s.version }
+func (s *testSource) MatchLevel() annotate.MatchLevel                      { return annotate.MatchGene }
 func (s *testSource) Columns() []annotate.ColumnDef                        { return s.columns }
 func (s *testSource) Annotate(v *vcf.Variant, anns []*annotate.Annotation) {}

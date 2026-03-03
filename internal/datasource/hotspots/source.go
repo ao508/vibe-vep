@@ -1,6 +1,8 @@
 package hotspots
 
 import (
+	"strings"
+
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
@@ -22,8 +24,9 @@ func NewSource(store *Store) *Source {
 	return &Source{store: store}
 }
 
-func (s *Source) Name() string    { return "hotspots" }
-func (s *Source) Version() string { return "v2" }
+func (s *Source) Name() string                   { return "hotspots" }
+func (s *Source) Version() string                 { return "v2" }
+func (s *Source) MatchLevel() annotate.MatchLevel { return annotate.MatchProteinPosition }
 
 func (s *Source) Columns() []annotate.ColumnDef {
 	return []annotate.ColumnDef{
@@ -33,13 +36,20 @@ func (s *Source) Columns() []annotate.ColumnDef {
 	}
 }
 
-// Annotate marks annotations whose gene+protein position is a known hotspot.
+// Annotate marks annotations whose transcript+protein position is a known hotspot.
+// Hotspot positions are defined per transcript, so the annotation's transcript must
+// match the hotspot's transcript for the position to be meaningful.
 func (s *Source) Annotate(_ *vcf.Variant, anns []*annotate.Annotation) {
 	for _, ann := range anns {
-		if ann.ProteinPosition == 0 || ann.GeneName == "" {
+		if ann.ProteinPosition == 0 || ann.TranscriptID == "" {
 			continue
 		}
-		if h, ok := s.store.Lookup(ann.GeneName, ann.ProteinPosition); ok {
+		// Strip version suffix (e.g. "ENST00000311936.8" → "ENST00000311936")
+		txID := ann.TranscriptID
+		if i := strings.IndexByte(txID, '.'); i >= 0 {
+			txID = txID[:i]
+		}
+		if h, ok := s.store.Lookup(txID, ann.ProteinPosition); ok {
 			ann.SetExtraKey(extraKeyHotspot, "Y")
 			if h.Type != "" {
 				ann.SetExtraKey(extraKeyType, h.Type)

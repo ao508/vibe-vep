@@ -2,10 +2,25 @@ package annotate
 
 import "github.com/inodb/vibe-vep/internal/vcf"
 
+// MatchLevel describes what a source matches on.
+type MatchLevel string
+
+const (
+	// MatchGenomic matches on chr:pos:ref:alt (genomic coordinates).
+	// Sources using this level are assembly-specific (GRCh37 vs GRCh38).
+	MatchGenomic MatchLevel = "genomic"
+	// MatchProteinPosition matches on transcript + amino acid position.
+	// Sources using this level are transcript-version sensitive.
+	MatchProteinPosition MatchLevel = "protein_position"
+	// MatchGene matches on gene symbol only.
+	MatchGene MatchLevel = "gene"
+)
+
 // AnnotationSource adds external data to variant annotations.
 type AnnotationSource interface {
 	Name() string         // e.g. "alphamissense"
 	Version() string      // e.g. "2023"
+	MatchLevel() MatchLevel // what the source matches on
 	Columns() []ColumnDef // columns this source provides
 	Annotate(v *vcf.Variant, anns []*Annotation)
 }

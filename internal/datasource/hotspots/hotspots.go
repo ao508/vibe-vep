@@ -14,15 +14,17 @@ import (
 
 // Hotspot represents a single hotspot entry at a protein position.
 type Hotspot struct {
-	Position int64   // amino acid position
-	Type     string  // "single residue", "in-frame indel", "3d", "splice"
-	QValue   float64 // statistical significance (q-value)
+	Position     int64   // amino acid position
+	TranscriptID string  // Ensembl transcript (unversioned, e.g. "ENST00000311936")
+	Type         string  // "single residue", "in-frame indel", "3d", "splice"
+	QValue       float64 // statistical significance (q-value)
 }
 
-// Store holds hotspot data keyed by gene symbol.
-// Each gene's hotspots are sorted by amino acid position for binary search.
+// Store holds hotspot data keyed by transcript ID.
+// Positions are only meaningful for the specific transcript they were defined on,
+// so lookups require matching the transcript, not just the gene.
 type Store struct {
-	data map[string][]Hotspot // gene symbol → sorted hotspots
+	data map[string][]Hotspot // transcript ID → sorted hotspots
 }
 
 // Load parses a hotspots TSV file (hotspots_v2_and_3d.txt format).
@@ -42,26 +44,32 @@ func Load(path string) (*Store, error) {
 		return nil, fmt.Errorf("empty hotspots file")
 	}
 	header := strings.Split(scanner.Text(), "\t")
-	colIdx := indexColumns(header, "hugo_symbol", "amino_acid_position", "type", "q_value")
-	if colIdx["hugo_symbol"] < 0 || colIdx["amino_acid_position"] < 0 {
-		return nil, fmt.Errorf("missing required columns: hugo_symbol, amino_acid_position")
+	colIdx := indexColumns(header, "hugo_symbol", "amino_acid_position", "type", "q_value", "transcript_id")
+	if colIdx["amino_acid_position"] < 0 || colIdx["transcript_id"] < 0 {
+		return nil, fmt.Errorf("missing required columns: amino_acid_position, transcript_id")
 	}
 
 	data := make(map[string][]Hotspot)
 	for scanner.Scan() {
 		fields := strings.Split(scanner.Text(), "\t")
-		if len(fields) <= colIdx["hugo_symbol"] || len(fields) <= colIdx["amino_acid_position"] {
+
+		txIdx := colIdx["transcript_id"]
+		posIdx := colIdx["amino_acid_position"]
+		if len(fields) <= txIdx || len(fields) <= posIdx {
 			continue
 		}
 
-		gene := fields[colIdx["hugo_symbol"]]
-		posStr := fields[colIdx["amino_acid_position"]]
+		txID := fields[txIdx]
+		if txID == "" {
+			continue // skip rows without a transcript
+		}
+		posStr := fields[posIdx]
 		pos, err := strconv.ParseInt(posStr, 10, 64)
 		if err != nil {
 			continue // skip rows with non-numeric positions
 		}
 
-		h := Hotspot{Position: pos}
+		h := Hotspot{Position: pos, TranscriptID: txID}
 
 		if idx := colIdx["type"]; idx >= 0 && idx < len(fields) {
 			h.Type = fields[idx]
@@ -72,7 +80,7 @@ func Load(path string) (*Store, error) {
 			}
 		}
 
-		data[gene] = append(data[gene], h)
+		data[txID] = append(data[txID], h)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read hotspots file: %w", err)
@@ -89,9 +97,10 @@ func Load(path string) (*Store, error) {
 	return &Store{data: data}, nil
 }
 
-// Lookup checks if a gene+position is a known hotspot.
-func (s *Store) Lookup(gene string, proteinPosition int64) (Hotspot, bool) {
-	spots := s.data[gene]
+// Lookup checks if a transcript+position is a known hotspot.
+// The transcriptID should be unversioned (e.g. "ENST00000311936").
+func (s *Store) Lookup(transcriptID string, proteinPosition int64) (Hotspot, bool) {
+	spots := s.data[transcriptID]
 	if len(spots) == 0 {
 		return Hotspot{}, false
 	}
@@ -106,8 +115,8 @@ func (s *Store) Lookup(gene string, proteinPosition int64) (Hotspot, bool) {
 	return Hotspot{}, false
 }
 
-// GeneCount returns the number of genes with hotspots.
-func (s *Store) GeneCount() int {
+// TranscriptCount returns the number of transcripts with hotspots.
+func (s *Store) TranscriptCount() int {
 	return len(s.data)
 }
 
