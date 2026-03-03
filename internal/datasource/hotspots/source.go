@@ -27,6 +27,7 @@ func NewSource(store *Store) *Source {
 func (s *Source) Name() string                   { return "hotspots" }
 func (s *Source) Version() string                 { return "v2" }
 func (s *Source) MatchLevel() annotate.MatchLevel { return annotate.MatchProteinPosition }
+func (s *Source) Store() *Store                   { return s.store }
 
 func (s *Source) Columns() []annotate.ColumnDef {
 	return []annotate.ColumnDef{

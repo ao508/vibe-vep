@@ -25,6 +25,7 @@ func NewSource(store *Store) *Source {
 func (s *Source) Name() string                   { return "clinvar" }
 func (s *Source) Version() string                 { return "2024" }
 func (s *Source) MatchLevel() annotate.MatchLevel { return annotate.MatchGenomic }
+func (s *Source) Store() *Store                   { return s.store }
 
 func (s *Source) Columns() []annotate.ColumnDef {
 	return []annotate.ColumnDef{

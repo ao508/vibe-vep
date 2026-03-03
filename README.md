@@ -302,18 +302,55 @@ oncokb:
 
 # Optional annotation sources
 annotations:
-  alphamissense: true  # AlphaMissense pathogenicity scores (CC BY 4.0)
+  alphamissense: true   # AlphaMissense pathogenicity scores (CC BY 4.0)
+  clinvar: true         # ClinVar clinical significance
+  hotspots: /path/to/hotspots_v2_and_3d.txt  # Cancer Hotspots (path to TSV)
+  signal: true          # SIGNAL germline frequencies (GRCh37 only)
 ```
 
 The `cancerGeneList.tsv` file can be downloaded from [OncoKB](https://www.oncokb.org/cancerGenes) or is included in this repository.
 
-Use `vibe-vep config set annotations.alphamissense true` to enable AlphaMissense. Then run `vibe-vep download` to fetch the data (~643MB) and `vibe-vep prepare` to load it into the annotation database.
+**Enabling annotation sources:**
+
+```bash
+# AlphaMissense (GRCh38): download + prepare + enable
+vibe-vep config set annotations.alphamissense true
+vibe-vep download  # fetches ~643 MB
+vibe-vep prepare   # loads into DuckDB
+
+# ClinVar (GRCh38): download + enable
+vibe-vep config set annotations.clinvar true
+vibe-vep download  # fetches ~182 MB clinvar.vcf.gz
+
+# Hotspots: point to TSV file
+vibe-vep config set annotations.hotspots /path/to/hotspots_v2_and_3d.txt
+
+# SIGNAL (GRCh37 only): enable
+vibe-vep config set annotations.signal true
+```
+
+Use `vibe-vep version` to see which sources are loaded and `vibe-vep version --maf-columns` for the full column mapping.
 
 ## Data Sources
 
-- **GENCODE**: Gene annotations from [GENCODE](https://www.gencodegenes.org/)
-- **OncoKB**: Cancer gene classification from [OncoKB](https://www.oncokb.org/) (optional, for gene-level ONCOGENE/TSG annotations)
-- **AlphaMissense**: Pathogenicity predictions from [AlphaMissense](https://github.com/google-deepmind/alphamissense) (Cheng et al., Science 2023). Data licensed under CC BY 4.0.
+### Core
+
+- **GENCODE**: Gene annotations from [GENCODE](https://www.gencodegenes.org/) — transcripts, exons, CDS coordinates
+
+### Annotation Sources (opt-in)
+
+| Source | Match Level | Assembly | Data Size | Description |
+|--------|------------|----------|-----------|-------------|
+| **OncoKB** | Gene symbol | Any | ~50 KB | Cancer gene classification (ONCOGENE/TSG) from [OncoKB](https://www.oncokb.org/) |
+| **AlphaMissense** | Genomic (chr:pos:ref:alt) | GRCh38 | ~643 MB | Missense pathogenicity scores from [AlphaMissense](https://github.com/google-deepmind/alphamissense) (Cheng et al., Science 2023). CC BY 4.0 |
+| **ClinVar** | Genomic (chr:pos:ref:alt) | GRCh38 | ~182 MB | Clinical significance from [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar/) (4.1M variants) |
+| **Cancer Hotspots** | Protein position (transcript + AA pos) | Any | ~200 KB | Recurrent mutation hotspots from [cancerhotspots.org](https://www.cancerhotspots.org/) |
+| **SIGNAL** | Genomic (chr:pos:ref:alt) | GRCh37 only | ~32 MB | Germline mutation frequencies from [SIGNAL](https://signal.mutationalsignatures.com/) |
+
+**Match level** determines how each source links to variants:
+- **Genomic**: matches on exact chr:pos:ref:alt — assembly-specific (GRCh37 vs GRCh38)
+- **Protein position**: matches on transcript + amino acid position — transcript-version sensitive. Hotspot positions are only annotated when the annotation's transcript matches the hotspot's transcript.
+- **Gene symbol**: matches on gene name only — assembly-independent
 
 ## Development
 
@@ -348,10 +385,12 @@ go test ./internal/output/ -run TestValidationBenchmark -v -count=1 -timeout 30m
   - [x] `--pick` / `--most-severe` annotation filtering
 - [ ] **Additional annotation sources** — Pathogenicity predictions and external databases
   - [x] AlphaMissense pathogenicity scores (CC BY 4.0, Google DeepMind)
+  - [x] ClinVar clinical significance (8.8% hit rate on TCGA variants)
+  - [x] Cancer Hotspots (cancerhotspots.org, transcript-matched)
+  - [x] SIGNAL germline frequencies (GRCh37)
   - [ ] SIFT predictions (tolerated/deleterious)
   - [ ] PolyPhen-2 predictions (benign/possibly_damaging/probably_damaging)
   - [ ] gnomAD allele frequencies
-  - [ ] ClinVar clinical significance
 - [ ] **Re-annotate datahub GDC studies** — Validate by re-annotating [cBioPortal/datahub](https://github.com/cBioPortal/datahub) GDC studies with vibe-vep
 - [ ] **Replace genome-nexus-annotation-pipeline for datahub** — Use vibe-vep as the annotation tool for datahub processing
 
