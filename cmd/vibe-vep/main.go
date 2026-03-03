@@ -750,18 +750,30 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			// Show configured annotation sources (lightweight, no data loading).
 			cacheDir := DefaultGENCODEPath(assembly)
 			type sourceInfo struct {
-				name, match, version, status string
-				columns                      []annotate.ColumnDef
+				name, match, assembly, version, status string
+				columns                                []annotate.ColumnDef
 			}
 			var infos []sourceInfo
+
+			// fileModDate returns the file modification date as YYYY-MM-DD, or "" on error.
+			fileModDate := func(path string) string {
+				fi, err := os.Stat(path)
+				if err != nil {
+					return ""
+				}
+				return fi.ModTime().Format("2006-01-02")
+			}
 
 			// OncoKB
 			if cglPath := viper.GetString("oncokb.cancer-gene-list"); cglPath != "" {
 				status := "configured"
-				if _, err := os.Stat(cglPath); err != nil {
+				ver := ""
+				if fi, err := os.Stat(cglPath); err != nil {
 					status = "file not found"
+				} else {
+					ver = fi.ModTime().Format("2006-01-02")
 				}
-				infos = append(infos, sourceInfo{"oncokb", string(annotate.MatchGene), "cancerGeneList.tsv", status,
+				infos = append(infos, sourceInfo{"oncokb", string(annotate.MatchGene), "any", ver, status,
 					[]annotate.ColumnDef{{Name: "gene_type", Description: "Gene classification (ONCOGENE/TSG)"}}})
 			}
 
@@ -769,10 +781,11 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			if viper.GetBool("annotations.alphamissense") {
 				dbPath := filepath.Join(cacheDir, "annotations.duckdb")
 				status := "configured"
+				ver := "2023"
 				if _, err := os.Stat(dbPath); err != nil {
 					status = "not prepared (run: vibe-vep prepare)"
 				}
-				infos = append(infos, sourceInfo{"alphamissense", string(annotate.MatchGenomic), "2023", status,
+				infos = append(infos, sourceInfo{"alphamissense", string(annotate.MatchGenomic), "GRCh38", ver, status,
 					[]annotate.ColumnDef{
 						{Name: "score", Description: "Pathogenicity score (0-1)"},
 						{Name: "class", Description: "likely_benign/ambiguous/likely_pathogenic"},
@@ -783,10 +796,11 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			if viper.GetBool("annotations.clinvar") {
 				cvPath := filepath.Join(cacheDir, ClinVarFileName)
 				status := "configured"
-				if _, err := os.Stat(cvPath); err != nil {
+				ver := fileModDate(cvPath)
+				if ver == "" {
 					status = "not downloaded (run: vibe-vep download)"
 				}
-				infos = append(infos, sourceInfo{"clinvar", string(annotate.MatchGenomic), "2024", status,
+				infos = append(infos, sourceInfo{"clinvar", string(annotate.MatchGenomic), "GRCh38", ver, status,
 					[]annotate.ColumnDef{
 						{Name: "clnsig", Description: "Clinical significance (e.g. Pathogenic, Benign)"},
 						{Name: "clnrevstat", Description: "Review status"},
@@ -797,10 +811,11 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			// Hotspots
 			if hsPath := viper.GetString("annotations.hotspots"); hsPath != "" {
 				status := "configured"
-				if _, err := os.Stat(hsPath); err != nil {
+				ver := fileModDate(hsPath)
+				if ver == "" {
 					status = "file not found"
 				}
-				infos = append(infos, sourceInfo{"hotspots", string(annotate.MatchProteinPosition), "v2", status,
+				infos = append(infos, sourceInfo{"hotspots", string(annotate.MatchProteinPosition), "any", ver, status,
 					[]annotate.ColumnDef{
 						{Name: "hotspot", Description: "Y if position is a known cancer hotspot"},
 						{Name: "type", Description: "Hotspot type: single residue, in-frame indel, 3d, splice"},
@@ -811,14 +826,15 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			// SIGNAL
 			if viper.GetBool("annotations.signal") {
 				if assembly != "grch37" {
-					infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "1.0", "skipped (GRCh37 only)", nil})
+					infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "GRCh37", "", "skipped (GRCh37 only)", nil})
 				} else {
 					status := "configured"
 					sigPath := filepath.Join(cacheDir, SignalFileName)
-					if _, err := os.Stat(sigPath); err != nil {
+					ver := fileModDate(sigPath)
+					if ver == "" {
 						status = "not downloaded"
 					}
-					infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "1.0", status,
+					infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "GRCh37", ver, status,
 						[]annotate.ColumnDef{
 							{Name: "mutation_status", Description: "Germline mutation status"},
 							{Name: "count_carriers", Description: "Number of carriers in SIGNAL cohort"},
@@ -831,9 +847,9 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 				fmt.Println()
 				fmt.Println("Annotation Sources:")
 				tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-				fmt.Fprintln(tw, "  NAME\tMATCH\tVERSION\tSTATUS")
+				fmt.Fprintln(tw, "  NAME\tMATCH\tASSEMBLY\tVERSION\tSTATUS")
 				for _, info := range infos {
-					fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", info.name, info.match, info.version, info.status)
+					fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\n", info.name, info.match, info.assembly, info.version, info.status)
 				}
 				tw.Flush()
 			}
