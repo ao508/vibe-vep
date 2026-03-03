@@ -1,0 +1,198 @@
+/* terminal.css — styles for the vibe-vep interactive tutorial */
+
+.tutorial-wrapper {
+  display: flex;
+  gap: 1.5rem;
+  margin: 1rem 0;
+  min-height: 500px;
+}
+
+/* Terminal panel */
+.terminal-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+#terminal-container {
+  height: 500px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #33467c;
+}
+
+#terminal-container .xterm {
+  padding: 8px;
+}
+
+/* Tutorial sidebar */
+#tutorial-sidebar {
+  width: 340px;
+  flex-shrink: 0;
+}
+
+.tutorial-step {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.tutorial-step-header {
+  margin-bottom: 1rem;
+}
+
+.tutorial-step-number {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+}
+
+.tutorial-step-header h3 {
+  margin: 0.25rem 0 0;
+  font-size: 1.1rem;
+  color: #212529;
+}
+
+.tutorial-step-content {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #495057;
+}
+
+.tutorial-step-content code {
+  background: #e9ecef;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+
+.tutorial-step-content ul {
+  padding-left: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.tutorial-step-content li {
+  margin: 0.25rem 0;
+}
+
+/* Run button */
+.tutorial-command {
+  margin: 1rem 0;
+}
+
+.tutorial-run-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #1a1b26;
+  color: #9ece6a;
+  border: 1px solid #33467c;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.tutorial-run-btn:hover {
+  background: #24283b;
+  border-color: #7aa2f7;
+}
+
+.tutorial-run-icon {
+  color: #9ece6a;
+  font-size: 0.9rem;
+}
+
+.tutorial-run-btn code {
+  background: none;
+  padding: 0;
+  color: #c0caf5;
+}
+
+/* Navigation */
+.tutorial-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  gap: 0.5rem;
+}
+
+.tutorial-nav-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  background: white;
+  color: #495057;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.tutorial-nav-btn:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.tutorial-next {
+  margin-left: auto;
+  background: #7aa2f7;
+  color: white;
+  border-color: #7aa2f7;
+}
+
+.tutorial-next:hover {
+  background: #5d8ae6;
+  border-color: #5d8ae6;
+}
+
+/* Progress dots */
+.tutorial-progress {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+}
+
+.tutorial-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dee2e6;
+  transition: background 0.2s;
+}
+
+.tutorial-progress-dot.active {
+  background: #7aa2f7;
+  transform: scale(1.2);
+}
+
+.tutorial-progress-dot.done {
+  background: #9ece6a;
+}
+
+/* Dark mode support */
+[data-bs-theme="dark"] .tutorial-step,
+.td-content .tutorial-step {
+  /* Docsy may not use data-bs-theme, keep both selectors */
+}
+
+/* Responsive: stack on narrow screens */
+@media (max-width: 900px) {
+  .tutorial-wrapper {
+    flex-direction: column-reverse;
+  }
+
+  #tutorial-sidebar {
+    width: 100%;
+  }
+
+  #terminal-container {
+    height: 400px;
+  }
+}

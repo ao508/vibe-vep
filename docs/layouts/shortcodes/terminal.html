@@ -1,0 +1,17 @@
+{{/* terminal.html — Hugo shortcode for the interactive vibe-vep tutorial */}}
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+<link rel="stylesheet" href="{{ "css/terminal.css" | relURL }}" />
+
+<div class="tutorial-wrapper">
+  <div class="terminal-panel">
+    <div id="terminal-container" data-wasm-path="{{ "wasm/vibe-vep.wasm" | relURL }}"></div>
+  </div>
+  <div id="tutorial-sidebar"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="{{ "js/wasm_exec.js" | relURL }}"></script>
+<script src="{{ "js/terminal.js" | relURL }}"></script>
+<script src="{{ "js/tutorial.js" | relURL }}"></script>

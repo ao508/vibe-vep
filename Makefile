@@ -1,4 +1,4 @@
-.PHONY: build test lint clean install download-testdata docs docs-build
+.PHONY: build test lint clean install download-testdata docs docs-build wasm wasm-exec
 
 # Binary name
 BINARY=vibe-vep
@@ -41,10 +41,18 @@ deps:
 	go mod download
 	go mod tidy
 
+# Build WASM binary for interactive tutorial
+wasm:
+	GOOS=js GOARCH=wasm go build $(LDFLAGS) -o docs/static/wasm/vibe-vep.wasm ./cmd/vibe-vep-wasm
+
+# Copy wasm_exec.js from Go installation
+wasm-exec:
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" docs/static/js/wasm_exec.js
+
 # Local docs preview (with drafts)
 docs:
 	cd docs && hugo server -D
 
-# Build docs for production
-docs-build:
+# Build docs for production (includes WASM)
+docs-build: wasm
 	cd docs && hugo --minify

@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'cmd/vibe-vep-wasm/**'
+      - 'internal/**'
   workflow_dispatch:
 
 permissions:
@@ -44,6 +46,12 @@ jobs:
       - name: Install PostCSS
         working-directory: docs
         run: npm ci
+
+      - name: Build WASM
+        run: |
+          mkdir -p docs/static/wasm
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o docs/static/wasm/vibe-vep.wasm ./cmd/vibe-vep-wasm
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" docs/static/js/wasm_exec.js
 
       - name: Setup Pages
         id: pages
