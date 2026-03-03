@@ -619,31 +619,16 @@ func loadAlphaMissense(logger *zap.Logger, cacheDir, assembly string) (*alphamis
 	return amStore, nil
 }
 
-// loadClinVar loads ClinVar data, using gob cache if available.
+// loadClinVar loads ClinVar data from the VCF file.
+// ClinVar has 4M+ entries — too large for gob caching on typical machines.
+// Parsing the gzipped VCF takes ~25s, which is acceptable for an opt-in source.
 func loadClinVar(logger *zap.Logger, cacheDir string) (*clinvar.Store, error) {
 	vcfPath := filepath.Join(cacheDir, ClinVarFileName)
-	gobPath := filepath.Join(cacheDir, "clinvar.gob")
-
-	// Try gob cache first
-	if clinvar.GobValid(gobPath, vcfPath) {
-		logger.Info("loading ClinVar from cache...")
-		start := time.Now()
-		store, err := clinvar.LoadGob(gobPath)
-		if err == nil {
-			logger.Info("loaded ClinVar from cache",
-				zap.Int("variants", store.Count()),
-				zap.Duration("elapsed", time.Since(start)))
-			return store, nil
-		}
-		logger.Warn("could not load ClinVar cache, re-parsing VCF", zap.Error(err))
-	}
-
-	// Parse VCF
 	if _, err := os.Stat(vcfPath); err != nil {
 		return nil, fmt.Errorf("ClinVar VCF not found at %s\nHint: run 'vibe-vep download' to fetch it", vcfPath)
 	}
 
-	logger.Info("parsing ClinVar VCF (first load may take a minute)...", zap.String("path", vcfPath))
+	logger.Info("parsing ClinVar VCF...", zap.String("path", vcfPath))
 	start := time.Now()
 	store, err := clinvar.Load(vcfPath)
 	if err != nil {
@@ -652,11 +637,6 @@ func loadClinVar(logger *zap.Logger, cacheDir string) (*clinvar.Store, error) {
 	logger.Info("loaded ClinVar data",
 		zap.Int("variants", store.Count()),
 		zap.Duration("elapsed", time.Since(start)))
-
-	// Save gob cache for fast reload
-	if err := store.SaveGob(gobPath); err != nil {
-		logger.Warn("could not save ClinVar cache", zap.Error(err))
-	}
 
 	return store, nil
 }

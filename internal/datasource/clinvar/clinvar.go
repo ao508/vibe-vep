@@ -1,11 +1,14 @@
 // Package clinvar provides ClinVar clinical significance lookups.
 // Data comes from the ClinVar VCF file (NCBI).
+//
+// Unlike smaller sources, ClinVar has 4M+ entries so gob caching would require
+// too much memory (~800 MB). Instead, the gzipped VCF is parsed directly on
+// each startup (~25s). This is acceptable since ClinVar is opt-in.
 package clinvar
 
 import (
 	"bufio"
 	"compress/gzip"
-	"encoding/gob"
 	"fmt"
 	"os"
 	"sort"
@@ -15,12 +18,12 @@ import (
 
 // Entry represents a single ClinVar variant annotation.
 type Entry struct {
-	Pos    int64
-	Ref    string
-	Alt    string
-	ClnSig string // Clinical significance (e.g., "Pathogenic")
+	Pos     int64
+	Ref     string
+	Alt     string
+	ClnSig  string // Clinical significance (e.g., "Pathogenic")
 	RevStat string // Review status
-	ClnDN  string // Disease name(s)
+	ClnDN   string // Disease name(s), truncated to 200 chars
 }
 
 // Store holds ClinVar data as sorted slices per chromosome.
@@ -49,6 +52,23 @@ func Load(path string) (*Store, error) {
 	}
 	scanner.Buffer(make([]byte, 4*1024*1024), 4*1024*1024)
 
+	// String interning deduplicates identical strings (ClnSig has ~20 unique
+	// values, RevStat ~10, Ref/Alt ~5 each) and detaches substrings from the
+	// scanner's line buffer, preventing massive memory retention.
+	intern := make(map[string]string)
+	internStr := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		if v, ok := intern[s]; ok {
+			return v
+		}
+		// Make an independent copy to detach from scanner buffer.
+		s = strings.Clone(s)
+		intern[s] = s
+		return s
+	}
+
 	data := make(map[string][]Entry)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -60,6 +80,12 @@ func Load(path string) (*Store, error) {
 		if !ok {
 			continue
 		}
+		// Intern all string fields to reduce memory.
+		entry.Ref = internStr(entry.Ref)
+		entry.Alt = internStr(entry.Alt)
+		entry.ClnSig = internStr(entry.ClnSig)
+		entry.RevStat = internStr(entry.RevStat)
+		entry.ClnDN = internStr(entry.ClnDN)
 		data[chrom] = append(data[chrom], entry)
 	}
 	if err := scanner.Err(); err != nil {
@@ -113,7 +139,7 @@ func parseVCFLine(line string) (Entry, string, bool) {
 		Alt:     alt,
 		ClnSig:  extractInfo(info, "CLNSIG="),
 		RevStat: extractInfo(info, "CLNREVSTAT="),
-		ClnDN:   extractInfo(info, "CLNDN="),
+		ClnDN:   truncate(extractInfo(info, "CLNDN="), 200),
 	}
 
 	// Skip entries without clinical significance
@@ -173,50 +199,10 @@ func normalizeChrom(chrom string) string {
 	return strings.TrimPrefix(chrom, "chr")
 }
 
-// gobData is the serialization format for gob cache.
-type gobData struct {
-	Data map[string][]Entry
-}
-
-// SaveGob serializes the store to a gob file for fast reload.
-func (s *Store) SaveGob(path string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create gob file: %w", err)
+// truncate limits a string to maxLen bytes.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
 	}
-
-	if err := gob.NewEncoder(f).Encode(gobData{Data: s.data}); err != nil {
-		f.Close()
-		os.Remove(path)
-		return fmt.Errorf("encode gob: %w", err)
-	}
-	return f.Close()
-}
-
-// LoadGob deserializes a store from a gob file.
-func LoadGob(path string) (*Store, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open gob file: %w", err)
-	}
-	defer f.Close()
-
-	var d gobData
-	if err := gob.NewDecoder(f).Decode(&d); err != nil {
-		return nil, fmt.Errorf("decode gob: %w", err)
-	}
-	return &Store{data: d.Data}, nil
-}
-
-// GobValid checks if a gob cache file exists and is newer than the source VCF.
-func GobValid(gobPath, vcfPath string) bool {
-	gobInfo, err := os.Stat(gobPath)
-	if err != nil {
-		return false
-	}
-	vcfInfo, err := os.Stat(vcfPath)
-	if err != nil {
-		return false
-	}
-	return gobInfo.ModTime().After(vcfInfo.ModTime())
+	return s[:maxLen]
 }

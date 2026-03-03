@@ -60,24 +60,6 @@ func TestLoadAndLookup(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestGobRoundTrip(t *testing.T) {
-	store, err := Load(writeVCF(t))
-	require.NoError(t, err)
-
-	gobPath := filepath.Join(t.TempDir(), "clinvar.gob")
-	require.NoError(t, store.SaveGob(gobPath))
-
-	store2, err := LoadGob(gobPath)
-	require.NoError(t, err)
-	assert.Equal(t, store.Count(), store2.Count())
-
-	// Verify data integrity after round-trip
-	e, ok := store2.Lookup("7", 140753336, "T", "A")
-	assert.True(t, ok)
-	assert.Equal(t, "Pathogenic", e.ClnSig)
-	assert.Equal(t, "Melanoma", e.ClnDN)
-}
-
 func TestAnnotate(t *testing.T) {
 	store, err := Load(writeVCF(t))
 	require.NoError(t, err)
