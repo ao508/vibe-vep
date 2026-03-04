@@ -1,5 +1,14 @@
 /* terminal.css — styles for the vibe-vep interactive tutorial */
 
+/* Hide the Docsy right-sidebar TOC on the tutorial page */
+.hide-toc .td-sidebar-toc {
+  display: none;
+}
+
+.hide-toc main {
+  max-width: 100%;
+}
+
 .tutorial-wrapper {
   display: flex;
   gap: 1.5rem;

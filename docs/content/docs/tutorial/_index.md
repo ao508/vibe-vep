@@ -2,6 +2,7 @@
 title: Interactive Tutorial
 description: Try vibe-vep in your browser with an interactive terminal
 weight: 1
+body_class: hide-toc
 ---
 
 Try vibe-vep directly in your browser — no installation required. This interactive
