@@ -10,7 +10,7 @@
  *   await client.close();
  */
 
-const DUCKDB_CDN = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/";
+const DUCKDB_CDN = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/dist/";
 
 export class VibeVEPClient {
   /**
@@ -24,24 +24,25 @@ export class VibeVEPClient {
 
   /** Load DuckDB-WASM from CDN and create a view over the remote Parquet file. */
   async init() {
-    // Dynamically import DuckDB-WASM
-    const duckdb = await import(DUCKDB_CDN + "duckdb-esm.js");
+    // Dynamically import DuckDB-WASM via jsdelivr ESM proxy
+    const duckdb = await import(
+      "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/+esm"
+    );
 
-    const bundle = await duckdb.selectBundle({
-      mvp: {
-        mainModule: DUCKDB_CDN + "duckdb-mvp.wasm",
-        mainWorker: DUCKDB_CDN + "duckdb-browser-mvp.worker.js",
-      },
-      eh: {
-        mainModule: DUCKDB_CDN + "duckdb-eh.wasm",
-        mainWorker: DUCKDB_CDN + "duckdb-browser-eh.worker.js",
-      },
-    });
+    const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
 
-    const worker = new Worker(bundle.mainWorker);
+    // Create worker via blob URL (avoids CORS issues with cross-origin workers)
+    const workerUrl = URL.createObjectURL(
+      new Blob([`importScripts("${bundle.mainWorker}");`], {
+        type: "text/javascript",
+      })
+    );
+    const worker = new Worker(workerUrl);
+
     const logger = new duckdb.ConsoleLogger();
     this._db = new duckdb.AsyncDuckDB(logger, worker);
-    await this._db.instantiate(bundle.mainModule);
+    await this._db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+    URL.revokeObjectURL(workerUrl);
 
     this._conn = await this._db.connect();
 
