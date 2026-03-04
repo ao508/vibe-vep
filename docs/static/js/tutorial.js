@@ -9,7 +9,7 @@
         "<p><strong>vibe-vep</strong> is a fast variant effect predictor " +
         "for cancer genomics. This interactive tutorial lets you try it " +
         "right in your browser.</p>" +
-        "<p>The demo includes KRAS and MRPL39 transcript data (GRCh38).</p>" +
+        "<p>The demo includes KRAS and EGFR transcript data (GRCh38).</p>" +
         "<p>Click <strong>Next</strong> to get started, or type commands " +
         "directly in the terminal.</p>",
       command: null,
@@ -53,7 +53,7 @@
       title: "View a VCF file",
       content:
         "<p>The demo includes an example VCF file with variants on " +
-        "chromosomes 12 and 21. Let's look at it.</p>",
+        "chromosomes 7 and 12. Let's look at it.</p>",
       command: "cat example.vcf",
     },
     {
@@ -70,7 +70,7 @@
         "<ul>" +
         '<li><code>vibe-vep genes</code> — list available genes</li>' +
         '<li><code>vibe-vep annotate variant KRAS G12D</code> — another KRAS hotspot</li>' +
-        '<li><code>vibe-vep annotate variant KRAS G12V</code> — G12V mutation</li>' +
+        '<li><code>vibe-vep annotate variant EGFR L858R</code> — common EGFR mutation</li>' +
         '<li><code>vibe-vep annotate variant KRAS c.35G>T</code> — HGVSc notation</li>' +
         '<li><code>vibe-vep version</code> — version info</li>' +
         "</ul>" +

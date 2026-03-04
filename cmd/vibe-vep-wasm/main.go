@@ -17,7 +17,7 @@ import (
 	"github.com/inodb/vibe-vep/internal/vcf"
 )
 
-//go:embed data/transcripts_12.json data/transcripts_21.json
+//go:embed data/transcripts_12.json data/transcripts_7.json
 var transcriptFS embed.FS
 
 //go:embed data/example.vcf
@@ -58,7 +58,7 @@ func main() {
 func initialize() error {
 	txCache = cache.New()
 
-	files := []string{"data/transcripts_12.json", "data/transcripts_21.json"}
+	files := []string{"data/transcripts_12.json", "data/transcripts_7.json"}
 	for _, f := range files {
 		data, err := transcriptFS.ReadFile(f)
 		if err != nil {
