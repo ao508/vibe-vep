@@ -24,7 +24,7 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 			fmt.Printf("%-15s%s\n", "vibe-vep", version)
 
 			// Show GENCODE info
-			assembly := viper.GetString("assembly")
+			assembly, _ := normalizeAssembly(viper.GetString("assembly"))
 			if assembly == "" {
 				assembly = "GRCh38"
 			}

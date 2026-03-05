@@ -171,8 +171,26 @@ func (cr *cacheResult) closeSources() {
 	}
 }
 
+// normalizeAssembly validates and normalizes the assembly name.
+// Accepts GRCh37, GRCh38 (canonical) and common aliases hg19, hg38.
+func normalizeAssembly(assembly string) (string, error) {
+	switch strings.ToLower(assembly) {
+	case "grch38", "hg38":
+		return "GRCh38", nil
+	case "grch37", "hg19":
+		return "GRCh37", nil
+	default:
+		return "", fmt.Errorf("unsupported assembly %q (use GRCh37 or GRCh38)", assembly)
+	}
+}
+
 // loadCache loads transcripts using gob transcript cache, and opens DuckDB for variant cache.
 func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*cacheResult, error) {
+	var err error
+	assembly, err = normalizeAssembly(assembly)
+	if err != nil {
+		return nil, err
+	}
 	gtfPath, fastaPath, canonicalPath, found := FindGENCODEFiles(assembly)
 	if !found {
 		return nil, fmt.Errorf("no GENCODE cache found for %s\nHint: Download GENCODE annotations with: vibe-vep download --assembly %s", assembly, assembly)

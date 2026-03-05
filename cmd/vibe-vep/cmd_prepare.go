@@ -43,9 +43,9 @@ index so subsequent annotate/compare runs start instantly.`,
 				zap.Int("transcripts", cr.cache.TranscriptCount()))
 
 			// Build the genomic annotation index.
-			asm := viper.GetString("assembly")
-			if asm == "" {
-				asm = "GRCh38"
+			asm, err := normalizeAssembly(viper.GetString("assembly"))
+			if err != nil {
+				return err
 			}
 			cacheDir := DefaultGENCODEPath(asm)
 			dbPath := genomicIndexPath(cacheDir)

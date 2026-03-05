@@ -79,6 +79,12 @@ func newDownloadCmd(verbose *bool) *cobra.Command {
 }
 
 func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) error {
+	var err error
+	assembly, err = normalizeAssembly(assembly)
+	if err != nil {
+		return err
+	}
+
 	// Determine output directory
 	if outputDir == "" {
 		home, err := os.UserHomeDir()
