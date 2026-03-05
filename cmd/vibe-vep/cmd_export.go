@@ -161,7 +161,7 @@ func runExportParquetFromCache(logger *zap.Logger, assembly, outputFile string, 
 
 	store, err := duckdb.Open(dbPath)
 	if err != nil {
-		return fmt.Errorf("opening variant cache: %w", err)
+		return fmt.Errorf("opening variant cache: %w\nHint: run an annotation with --save-results first to populate the cache", err)
 	}
 	defer store.Close()
 
@@ -172,7 +172,7 @@ func runExportParquetFromCache(logger *zap.Logger, assembly, outputFile string, 
 		return fmt.Errorf("reading cached results: %w", err)
 	}
 	if len(results) == 0 {
-		return fmt.Errorf("no variants in cache")
+		return fmt.Errorf("no variants in cache\nHint: run an annotation with --save-results first, then export")
 	}
 
 	rows := make([]pqexport.Row, len(results))

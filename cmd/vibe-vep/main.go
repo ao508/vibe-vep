@@ -206,7 +206,8 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 	} else if err1 == nil && err2 == nil && tc.Valid(gtfFP, fastaFP, canonicalFP) {
 		start := time.Now()
 		if err := tc.Load(c); err != nil {
-			logger.Warn("transcript cache load failed, falling back to GTF/FASTA", zap.Error(err))
+			logger.Warn("transcript cache load failed, falling back to GTF/FASTA (try --clear-cache to rebuild)",
+				zap.Error(err))
 		} else {
 			logger.Info("loaded transcript cache",
 				zap.Int("count", c.TranscriptCount()),
@@ -249,7 +250,8 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 	dbPath := filepath.Join(cacheDir, "variant_cache.duckdb")
 	store, err := duckdb.Open(dbPath)
 	if err != nil {
-		logger.Warn("could not open variant cache", zap.Error(err))
+		logger.Warn("could not open variant cache (try --clear-cache or delete "+dbPath+")",
+			zap.Error(err))
 		return &cacheResult{cache: c}, nil
 	}
 
@@ -267,6 +269,14 @@ func loadCache(logger *zap.Logger, assembly string, noCache, clearCache bool) (*
 	// --- Build annotation sources ---
 	cr.sources = buildSources(logger, cacheDir, assembly)
 
+	if len(cr.sources) > 0 {
+		names := make([]string, len(cr.sources))
+		for i, s := range cr.sources {
+			names[i] = s.Name()
+		}
+		logger.Info("annotation sources loaded", zap.Strings("sources", names))
+	}
+
 	return cr, nil
 }
 
@@ -278,7 +288,8 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 	if cglPath := viper.GetString("oncokb.cancer-gene-list"); cglPath != "" {
 		cgl, err := oncokb.LoadCancerGeneList(cglPath)
 		if err != nil {
-			logger.Warn("could not load cancer gene list", zap.String("path", cglPath), zap.Error(err))
+			logger.Warn("could not load cancer gene list (check oncokb.cancer-gene-list path in config)",
+				zap.String("path", cglPath), zap.Error(err))
 		} else {
 			logger.Info("loaded cancer gene list", zap.Int("genes", len(cgl)))
 			sources = append(sources, oncokb.NewSource(cgl))
@@ -291,7 +302,8 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 	if needGenomic {
 		gs, err := loadGenomicIndex(logger, cacheDir, assembly)
 		if err != nil {
-			logger.Warn("could not load genomic index", zap.Error(err))
+			logger.Warn("could not load genomic index (try: vibe-vep prepare --assembly "+assembly+")",
+				zap.Error(err))
 		} else {
 			sources = append(sources, gs)
 		}
@@ -301,7 +313,8 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 	if hotspotsPath := viper.GetString("annotations.hotspots"); hotspotsPath != "" {
 		store, err := hotspots.Load(hotspotsPath)
 		if err != nil {
-			logger.Warn("could not load hotspots data", zap.String("path", hotspotsPath), zap.Error(err))
+			logger.Warn("could not load hotspots data (check annotations.hotspots path in config)",
+				zap.String("path", hotspotsPath), zap.Error(err))
 		} else {
 			logger.Info("loaded cancer hotspots", zap.Int("transcripts", store.TranscriptCount()), zap.Int("hotspots", store.HotspotCount()))
 			sources = append(sources, hotspots.NewSource(store))
@@ -362,7 +375,7 @@ func loadGenomicIndex(logger *zap.Logger, cacheDir, assembly string) (*genomicin
 		if err := genomicindex.Build(dbPath, bs, func(msg string, args ...any) {
 			logger.Info(fmt.Sprintf(msg, args...))
 		}); err != nil {
-			return nil, fmt.Errorf("build genomic index: %w", err)
+			return nil, fmt.Errorf("build genomic index: %w\nHint: ensure source data files exist in %s (run: vibe-vep download --assembly %s)", err, cacheDir, assembly)
 		}
 		logger.Info("built genomic index", zap.Duration("elapsed", time.Since(start)))
 	} else {
