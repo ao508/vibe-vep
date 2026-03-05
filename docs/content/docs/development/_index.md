@@ -6,7 +6,7 @@ weight: 6
 
 ## Prerequisites
 
-- Go 1.24+ with `CGO_ENABLED=1` (required for DuckDB)
+- Go 1.24+ with `CGO_ENABLED=1` (required for DuckDB and SQLite)
 - Git
 
 ## Building
@@ -61,6 +61,7 @@ internal/
   annotate/         Consequence prediction (PredictConsequence, Annotator)
   cache/            Transcript cache (GENCODE GTF/FASTA loader)
   duckdb/           DuckDB cache for transcripts and variant results
+  genomicindex/     Unified SQLite index for annotation source lookups (AM, ClinVar, SIGNAL)
   maf/              MAF file parser
   output/           Output formatting and validation comparison
   vcf/              VCF file parser

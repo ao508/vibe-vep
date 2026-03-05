@@ -2,7 +2,7 @@
 
 ## Tech Stack
 
-- Go 1.24+ (CGO required for DuckDB)
+- Go 1.24+ (CGO required for DuckDB and SQLite)
 
 ## Project Structure
 
@@ -12,6 +12,7 @@ internal/
   annotate/         Consequence prediction (PredictConsequence, Annotator)
   cache/            Transcript cache (GENCODE GTF/FASTA loader)
   duckdb/           DuckDB cache for transcripts and variant results
+  genomicindex/     Unified SQLite index for annotation source lookups
   maf/              MAF file parser
   output/           Output formatting and validation comparison
   vcf/              VCF file parser
@@ -46,6 +47,8 @@ go run ./cmd/vibe-vep annotate --validate testdata/tcga/chol_tcga_gdc_data_mutat
 ## Key Design Decisions
 
 - GENCODE GTF/FASTA as primary data source, DuckDB cache at `~/.vibe-vep/{assembly}/cache.duckdb` for fast startup and variant result caching
+- SQLite (`genomic_annotations.sqlite`) for annotation source point lookups (AlphaMissense, ClinVar, SIGNAL) — `WITHOUT ROWID` clustered index, ~1-5μs per lookup via mmap
+- DuckDB for columnar post-analysis (`--save-results` / `--from-cache` / `export parquet`)
 - Consequence prediction follows Sequence Ontology terms with VEP-compatible output
 - Transcript prioritization: canonical > protein-coding biotype > highest impact
 - Validation normalizes MAF and SO consequence terms before comparison

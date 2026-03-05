@@ -163,7 +163,7 @@ The `cancerGeneList.tsv` file can be downloaded from [OncoKB](https://www.oncokb
 # AlphaMissense (GRCh38): download + prepare + enable
 vibe-vep config set annotations.alphamissense true
 vibe-vep download  # fetches ~643 MB
-vibe-vep prepare   # loads into DuckDB
+vibe-vep prepare   # builds SQLite index
 
 # ClinVar (GRCh38): download + enable
 vibe-vep config set annotations.clinvar true

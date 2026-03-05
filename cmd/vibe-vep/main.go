@@ -15,12 +15,10 @@ import (
 
 	"github.com/inodb/vibe-vep/internal/annotate"
 	"github.com/inodb/vibe-vep/internal/cache"
-	"github.com/inodb/vibe-vep/internal/datasource/alphamissense"
-	"github.com/inodb/vibe-vep/internal/datasource/clinvar"
 	"github.com/inodb/vibe-vep/internal/datasource/hotspots"
 	"github.com/inodb/vibe-vep/internal/datasource/oncokb"
-	"github.com/inodb/vibe-vep/internal/datasource/signal"
 	"github.com/inodb/vibe-vep/internal/duckdb"
+	"github.com/inodb/vibe-vep/internal/genomicindex"
 	"github.com/inodb/vibe-vep/internal/maf"
 	"github.com/inodb/vibe-vep/internal/output"
 	pqexport "github.com/inodb/vibe-vep/internal/parquet"
@@ -705,11 +703,11 @@ type cacheResult struct {
 	sources []annotate.AnnotationSource
 }
 
-// closeSources closes any sources that implement io.Closer (e.g. AlphaMissense Store).
+// closeSources closes any sources that implement io.Closer (e.g. GenomicSource).
 func (cr *cacheResult) closeSources() {
 	for _, src := range cr.sources {
-		if amSrc, ok := src.(*alphamissense.Source); ok {
-			amSrc.Store().Close()
+		if gs, ok := src.(*genomicindex.GenomicSource); ok {
+			gs.Store().Close()
 		}
 	}
 }
@@ -828,23 +826,15 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		}
 	}
 
-	// AlphaMissense
-	if viper.GetBool("annotations.alphamissense") {
-		amStore, err := loadAlphaMissense(logger, cacheDir, assembly)
+	// Unified genomic index (AlphaMissense + ClinVar + SIGNAL)
+	needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
+		(viper.GetBool("annotations.signal") && assembly == "grch37")
+	if needGenomic {
+		gs, err := loadGenomicIndex(logger, cacheDir, assembly)
 		if err != nil {
-			logger.Warn("could not load AlphaMissense data", zap.Error(err))
+			logger.Warn("could not load genomic index", zap.Error(err))
 		} else {
-			sources = append(sources, alphamissense.NewSource(amStore))
-		}
-	}
-
-	// ClinVar
-	if viper.GetBool("annotations.clinvar") {
-		cvStore, err := loadClinVar(logger, cacheDir)
-		if err != nil {
-			logger.Warn("could not load ClinVar data", zap.Error(err))
-		} else {
-			sources = append(sources, clinvar.NewSource(cvStore))
+			sources = append(sources, gs)
 		}
 	}
 
@@ -856,20 +846,6 @@ func buildSources(logger *zap.Logger, cacheDir, assembly string) []annotate.Anno
 		} else {
 			logger.Info("loaded cancer hotspots", zap.Int("transcripts", store.TranscriptCount()), zap.Int("hotspots", store.HotspotCount()))
 			sources = append(sources, hotspots.NewSource(store))
-		}
-	}
-
-	// SIGNAL (GRCh37 only — no liftover support yet)
-	if viper.GetBool("annotations.signal") {
-		if assembly != "grch37" {
-			logger.Warn("SIGNAL data uses GRCh37 coordinates, skipping for assembly", zap.String("assembly", assembly))
-		} else {
-			sigStore, err := loadSignal(logger, cacheDir)
-			if err != nil {
-				logger.Warn("could not load SIGNAL data", zap.Error(err))
-			} else {
-				sources = append(sources, signal.NewSource(sigStore))
-			}
 		}
 	}
 
@@ -901,97 +877,45 @@ func loadFromGTFFASTA(logger *zap.Logger, c *cache.Cache, gtfPath, fastaPath, ca
 	return nil
 }
 
-// loadAlphaMissense opens the AlphaMissense DuckDB store, loading from TSV if needed.
-func loadAlphaMissense(logger *zap.Logger, cacheDir, assembly string) (*alphamissense.Store, error) {
-	dbPath := filepath.Join(cacheDir, "annotations.duckdb")
-	amStore, err := alphamissense.Open(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("open AlphaMissense store: %w", err)
+// genomicIndexSources returns the BuildSources config for the given assembly and cache dir.
+func genomicIndexSources(cacheDir, assembly string) genomicindex.BuildSources {
+	bs := genomicindex.BuildSources{
+		AlphaMissenseTSV: filepath.Join(cacheDir, AlphaMissenseFileName(assembly)),
+		ClinVarVCF:       filepath.Join(cacheDir, ClinVarFileName),
+		SignalTSV:        filepath.Join(cacheDir, SignalFileName),
 	}
+	return bs
+}
 
-	if !amStore.Loaded() {
-		tsvPath := filepath.Join(cacheDir, AlphaMissenseFileName(assembly))
-		if _, err := os.Stat(tsvPath); err != nil {
-			amStore.Close()
-			return nil, fmt.Errorf("AlphaMissense TSV not found at %s\nHint: run 'vibe-vep download' to fetch it", tsvPath)
-		}
+// genomicIndexPath returns the path to the unified SQLite genomic index.
+func genomicIndexPath(cacheDir string) string {
+	return filepath.Join(cacheDir, "genomic_annotations.sqlite")
+}
 
-		logger.Info("loading AlphaMissense data (this may take a few minutes)...", zap.String("path", tsvPath))
+// loadGenomicIndex opens (or builds) the unified genomic annotation index.
+func loadGenomicIndex(logger *zap.Logger, cacheDir, assembly string) (*genomicindex.GenomicSource, error) {
+	dbPath := genomicIndexPath(cacheDir)
+	bs := genomicIndexSources(cacheDir, assembly)
+
+	if !genomicindex.Ready(dbPath, bs) {
+		logger.Info("building genomic index (this may take several minutes)...")
 		start := time.Now()
-		if err := amStore.Load(tsvPath); err != nil {
-			amStore.Close()
-			return nil, fmt.Errorf("load AlphaMissense data: %w", err)
+		if err := genomicindex.Build(dbPath, bs, func(msg string, args ...any) {
+			logger.Info(fmt.Sprintf(msg, args...))
+		}); err != nil {
+			return nil, fmt.Errorf("build genomic index: %w", err)
 		}
-		logger.Info("loaded AlphaMissense data", zap.Duration("elapsed", time.Since(start)))
+		logger.Info("built genomic index", zap.Duration("elapsed", time.Since(start)))
 	} else {
-		logger.Info("AlphaMissense data already loaded")
+		logger.Info("genomic index up to date")
 	}
 
-	return amStore, nil
-}
-
-// loadClinVar loads ClinVar data from the VCF file.
-// ClinVar has 4M+ entries — too large for gob caching on typical machines.
-// Parsing the gzipped VCF takes ~25s, which is acceptable for an opt-in source.
-func loadClinVar(logger *zap.Logger, cacheDir string) (*clinvar.Store, error) {
-	vcfPath := filepath.Join(cacheDir, ClinVarFileName)
-	if _, err := os.Stat(vcfPath); err != nil {
-		return nil, fmt.Errorf("ClinVar VCF not found at %s\nHint: run 'vibe-vep download' to fetch it", vcfPath)
-	}
-
-	logger.Info("parsing ClinVar VCF...", zap.String("path", vcfPath))
-	start := time.Now()
-	store, err := clinvar.Load(vcfPath)
+	store, err := genomicindex.Open(dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("load ClinVar data: %w", err)
-	}
-	logger.Info("loaded ClinVar data",
-		zap.Int("variants", store.Count()),
-		zap.Duration("elapsed", time.Since(start)))
-
-	return store, nil
-}
-
-// loadSignal loads SIGNAL data, using gob cache if available.
-func loadSignal(logger *zap.Logger, cacheDir string) (*signal.Store, error) {
-	tsvPath := filepath.Join(cacheDir, SignalFileName)
-	gobPath := filepath.Join(cacheDir, "signal.gob")
-
-	// Try gob cache first
-	if signal.GobValid(gobPath, tsvPath) {
-		logger.Info("loading SIGNAL from cache...")
-		start := time.Now()
-		store, err := signal.LoadGob(gobPath)
-		if err == nil {
-			logger.Info("loaded SIGNAL from cache",
-				zap.Int("variants", store.Count()),
-				zap.Duration("elapsed", time.Since(start)))
-			return store, nil
-		}
-		logger.Warn("could not load SIGNAL cache, re-parsing TSV", zap.Error(err))
+		return nil, fmt.Errorf("open genomic index: %w", err)
 	}
 
-	// Parse TSV
-	if _, err := os.Stat(tsvPath); err != nil {
-		return nil, fmt.Errorf("SIGNAL TSV not found at %s\nHint: run 'vibe-vep download' to fetch it", tsvPath)
-	}
-
-	logger.Info("parsing SIGNAL data...", zap.String("path", tsvPath))
-	start := time.Now()
-	store, err := signal.Load(tsvPath)
-	if err != nil {
-		return nil, fmt.Errorf("load SIGNAL data: %w", err)
-	}
-	logger.Info("loaded SIGNAL data",
-		zap.Int("variants", store.Count()),
-		zap.Duration("elapsed", time.Since(start)))
-
-	// Save gob cache for fast reload
-	if err := store.SaveGob(gobPath); err != nil {
-		logger.Warn("could not save SIGNAL cache", zap.Error(err))
-	}
-
-	return store, nil
+	return genomicindex.NewSource(store, "1.0"), nil
 }
 
 func newPrepareCmd(verbose *bool) *cobra.Command {
@@ -1023,6 +947,29 @@ func newPrepareCmd(verbose *bool) *cobra.Command {
 			cr.closeSources()
 			logger.Info("transcript cache ready",
 				zap.Int("transcripts", cr.cache.TranscriptCount()))
+
+			// Build the genomic annotation index.
+			asm := viper.GetString("assembly")
+			if asm == "" {
+				asm = "GRCh38"
+			}
+			cacheDir := DefaultGENCODEPath(asm)
+			dbPath := genomicIndexPath(cacheDir)
+			bs := genomicIndexSources(cacheDir, asm)
+
+			if !genomicindex.Ready(dbPath, bs) {
+				logger.Info("building genomic index...")
+				start := time.Now()
+				if err := genomicindex.Build(dbPath, bs, func(msg string, args ...any) {
+					logger.Info(fmt.Sprintf(msg, args...))
+				}); err != nil {
+					return fmt.Errorf("build genomic index: %w", err)
+				}
+				logger.Info("built genomic index", zap.Duration("elapsed", time.Since(start)))
+			} else {
+				logger.Info("genomic index already up to date")
+			}
+
 			return nil
 		},
 	}
@@ -1084,35 +1031,44 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 					[]annotate.ColumnDef{{Name: "gene_type", Description: "Gene classification (ONCOGENE/TSG)"}}})
 			}
 
-			// AlphaMissense
-			if viper.GetBool("annotations.alphamissense") {
-				dbPath := filepath.Join(cacheDir, "annotations.duckdb")
-				status := "configured"
-				ver := "2023"
-				if _, err := os.Stat(dbPath); err != nil {
+			// Genomic index (AlphaMissense + ClinVar + SIGNAL)
+			needGenomic := viper.GetBool("annotations.alphamissense") || viper.GetBool("annotations.clinvar") ||
+				(viper.GetBool("annotations.signal") && assembly == "grch37")
+			if needGenomic {
+				dbPath := genomicIndexPath(cacheDir)
+				status := "ready"
+				ver := fileModDate(dbPath)
+				if ver == "" {
 					status = "not prepared (run: vibe-vep prepare)"
 				}
-				infos = append(infos, sourceInfo{"alphamissense", string(annotate.MatchGenomic), "GRCh38", ver, status,
-					[]annotate.ColumnDef{
-						{Name: "score", Description: "Pathogenicity score (0-1)"},
-						{Name: "class", Description: "likely_benign/ambiguous/likely_pathogenic"},
-					}})
-			}
 
-			// ClinVar
-			if viper.GetBool("annotations.clinvar") {
-				cvPath := filepath.Join(cacheDir, ClinVarFileName)
-				status := "configured"
-				ver := fileModDate(cvPath)
-				if ver == "" {
-					status = "not downloaded (run: vibe-vep download)"
+				if viper.GetBool("annotations.alphamissense") {
+					infos = append(infos, sourceInfo{"alphamissense", string(annotate.MatchGenomic), "GRCh38", ver, status,
+						[]annotate.ColumnDef{
+							{Name: "score", Description: "Pathogenicity score (0-1)"},
+							{Name: "class", Description: "likely_benign/ambiguous/likely_pathogenic"},
+						}})
 				}
-				infos = append(infos, sourceInfo{"clinvar", string(annotate.MatchGenomic), "GRCh38", ver, status,
-					[]annotate.ColumnDef{
-						{Name: "clnsig", Description: "Clinical significance (e.g. Pathogenic, Benign)"},
-						{Name: "clnrevstat", Description: "Review status"},
-						{Name: "clndn", Description: "Disease name(s)"},
-					}})
+				if viper.GetBool("annotations.clinvar") {
+					infos = append(infos, sourceInfo{"clinvar", string(annotate.MatchGenomic), "GRCh38", ver, status,
+						[]annotate.ColumnDef{
+							{Name: "clnsig", Description: "Clinical significance (e.g. Pathogenic, Benign)"},
+							{Name: "clnrevstat", Description: "Review status"},
+							{Name: "clndn", Description: "Disease name(s)"},
+						}})
+				}
+				if viper.GetBool("annotations.signal") {
+					if assembly != "grch37" {
+						infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "GRCh37", "", "skipped (GRCh37 only)", nil})
+					} else {
+						infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "GRCh37", ver, status,
+							[]annotate.ColumnDef{
+								{Name: "mutation_status", Description: "Germline mutation status"},
+								{Name: "count_carriers", Description: "Number of carriers in SIGNAL cohort"},
+								{Name: "frequency", Description: "Overall allele frequency in SIGNAL cohort"},
+							}})
+					}
+				}
 			}
 
 			// Hotspots
@@ -1128,26 +1084,6 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 						{Name: "type", Description: "Hotspot type: single residue, in-frame indel, 3d, splice"},
 						{Name: "qvalue", Description: "Statistical significance (q-value)"},
 					}})
-			}
-
-			// SIGNAL
-			if viper.GetBool("annotations.signal") {
-				if assembly != "grch37" {
-					infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "GRCh37", "", "skipped (GRCh37 only)", nil})
-				} else {
-					status := "configured"
-					sigPath := filepath.Join(cacheDir, SignalFileName)
-					ver := fileModDate(sigPath)
-					if ver == "" {
-						status = "not downloaded"
-					}
-					infos = append(infos, sourceInfo{"signal", string(annotate.MatchGenomic), "GRCh37", ver, status,
-						[]annotate.ColumnDef{
-							{Name: "mutation_status", Description: "Germline mutation status"},
-							{Name: "count_carriers", Description: "Number of carriers in SIGNAL cohort"},
-							{Name: "frequency", Description: "Overall allele frequency in SIGNAL cohort"},
-						}})
-				}
 			}
 
 			if len(infos) > 0 {

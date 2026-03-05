@@ -26,13 +26,23 @@ weight: 3
 - **Protein position**: matches on transcript + amino acid position — transcript-version sensitive. Hotspot positions are only annotated when the annotation's transcript matches the hotspot's transcript.
 - **Gene symbol**: matches on gene name only — assembly-independent
 
+## Storage
+
+Genomic annotation sources (AlphaMissense, ClinVar, SIGNAL) are merged into a single SQLite database (`genomic_annotations.sqlite`) with a `WITHOUT ROWID` clustered primary key on `(chrom, pos, ref, alt)`. This gives ~1-5μs point lookups with near-zero Go heap via mmap — one DB lookup per variant instead of three.
+
+All variants are stored with normalized coordinates:
+- **Chromosome**: without "chr" prefix (e.g. "12", not "chr12")
+- **Position and alleles**: canonical MAF-style (no anchor base for indels). VCF-style indels are normalized during build and lookup, so both formats match correctly.
+
+This is separate from the DuckDB variant cache (`variant_cache.duckdb`) used for `--save-results` / `--from-cache` / `export parquet` post-analysis.
+
 ## Enabling Sources
 
 ```bash
 # AlphaMissense (GRCh38): download + prepare + enable
 vibe-vep config set annotations.alphamissense true
 vibe-vep download  # fetches ~643 MB
-vibe-vep prepare   # loads into DuckDB
+vibe-vep prepare   # builds SQLite index
 
 # ClinVar (GRCh38): download + enable
 vibe-vep config set annotations.clinvar true
