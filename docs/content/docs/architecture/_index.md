@@ -144,9 +144,18 @@ All data lives under `~/.vibe-vep/{assembly}/`:
 |--------|------|---------|---------------|
 | **Gob** | `transcripts.gob` | 254K transcripts with exon/CDS/protein data | Full deserialize on startup |
 | **SQLite** | `genomic_annotations.sqlite` | 75M+ annotation records (AM + ClinVar + SIGNAL) | mmap point lookups, ~1-5 &mu;s |
-| **DuckDB** | `variant_cache.duckdb` | Annotation result cache + Parquet export | Columnar read/write, batch queries |
+| **DuckDB** | `variant_cache.duckdb` | Previously annotated results + Parquet export | Columnar read/write, batch queries |
 
-The SQLite genomic index uses a `WITHOUT ROWID` table with a clustered primary key on `(chrom, pos, ref, alt)`. This means lookups are a single B-tree traversal with no indirection, served directly from mmap with near-zero Go heap allocation.
+### SQLite vs DuckDB: Why Two Databases?
+
+**SQLite** (`genomic_annotations.sqlite`) is a **read-only reference database** used *during* annotation. It holds pre-computed data from external sources (AlphaMissense scores, ClinVar significance, SIGNAL frequencies) and is queried once per variant via a point lookup on `(chrom, pos, ref, alt)`. Built once by `vibe-vep prepare`, it uses a `WITHOUT ROWID` clustered primary key for single B-tree traversals served directly from mmap with near-zero Go heap allocation (~1-5 &mu;s per lookup).
+
+**DuckDB** (`variant_cache.duckdb`) stores **annotation results** written *after* annotation. It serves two purposes:
+
+1. **Variant result cache** (`--save-results`): Stores completed annotations so re-annotating the same variant skips prediction. Useful when re-running on overlapping datasets.
+2. **Post-annotation analysis** (`--from-cache`, `export parquet`): Enables columnar queries over previously annotated results --- filter by gene, consequence, or clinical significance without re-processing the input file.
+
+In short: SQLite provides input data for the annotation engine, DuckDB captures its output for downstream use.
 
 ## Parallelism
 
