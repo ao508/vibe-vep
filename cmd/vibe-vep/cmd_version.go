@@ -29,7 +29,7 @@ func newVersionCmd(verbose *bool) *cobra.Command {
 				assembly = "GRCh38"
 			}
 			if _, _, _, found := FindGENCODEFiles(assembly); found {
-				fmt.Printf("%-15s%s (%s)\n", "GENCODE", GencodeVersion, assembly)
+				fmt.Printf("%-15s%s (%s)\n", "GENCODE", GencodeVersionForAssembly(assembly), assembly)
 			}
 
 			// Show configured annotation sources (lightweight, no data loading).

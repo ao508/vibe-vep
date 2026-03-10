@@ -817,7 +817,7 @@ func findStudyDir(t *testing.T, subdir string) string {
 }
 
 // findGENCODEFiles locates GENCODE cache files for the given assembly.
-// Uses assembly-specific glob patterns: gencode.v*lift37.* for GRCh37.
+// Finds GENCODE files in the default cache directory for the given assembly.
 func findGENCODEFiles(t *testing.T, assembly string) (gtfPath, fastaPath, canonicalPath string) {
 	t.Helper()
 
@@ -827,14 +827,9 @@ func findGENCODEFiles(t *testing.T, assembly string) (gtfPath, fastaPath, canoni
 	}
 	dir := filepath.Join(home, ".vibe-vep", strings.ToLower(assembly))
 
-	var gtfPattern, fastaPattern string
-	if strings.EqualFold(assembly, "GRCh37") {
-		gtfPattern = "gencode.v*lift37.annotation.gtf.gz"
-		fastaPattern = "gencode.v*lift37.pc_transcripts.fa.gz"
-	} else {
-		gtfPattern = "gencode.v*.annotation.gtf.gz"
-		fastaPattern = "gencode.v*.pc_transcripts.fa.gz"
-	}
+	// Both assemblies use gencode.v*.annotation.gtf.gz (GRCh37 uses native v19, not liftover).
+	gtfPattern := "gencode.v*.annotation.gtf.gz"
+	fastaPattern := "gencode.v*.pc_transcripts.fa.gz"
 
 	matches, err := filepath.Glob(filepath.Join(dir, gtfPattern))
 	if err != nil || len(matches) == 0 {

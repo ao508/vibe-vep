@@ -16,28 +16,35 @@ import (
 	"github.com/spf13/viper"
 )
 
-// GENCODE FTP URLs
+// GENCODE FTP base URL and per-assembly versions.
+// VEP v111 (Ensembl 111) uses GENCODE v45 for GRCh38 and v19 for GRCh37.
 const (
-	gencodeBaseURL = "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46"
+	gencodeBase = "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human"
 
-	// GencodeVersion is the GENCODE release version used for annotations.
-	GencodeVersion = "v46"
+	// GencodeVersionGRCh38 is the GENCODE release for GRCh38 (matches VEP v111).
+	GencodeVersionGRCh38 = "v45"
+
+	// GencodeVersionGRCh37 is the native GENCODE release for GRCh37 (Ensembl 75).
+	GencodeVersionGRCh37 = "v19"
 )
 
-// getGENCODEURLs returns the GTF and FASTA URLs for the given assembly.
-func getGENCODEURLs(assembly string) (gtfURL, fastaURL string) {
-	switch strings.ToUpper(assembly) {
-	case "GRCH37":
-		gtfURL = fmt.Sprintf("%s/GRCh37_mapping/gencode.%slift37.annotation.gtf.gz", gencodeBaseURL, GencodeVersion)
-		fastaURL = fmt.Sprintf("%s/GRCh37_mapping/gencode.%slift37.pc_transcripts.fa.gz", gencodeBaseURL, GencodeVersion)
-	case "GRCH38":
-		gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", gencodeBaseURL, GencodeVersion)
-		fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", gencodeBaseURL, GencodeVersion)
-	default:
-		// Default to GRCh38
-		gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", gencodeBaseURL, GencodeVersion)
-		fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", gencodeBaseURL, GencodeVersion)
+// GencodeVersionForAssembly returns the GENCODE version for the given assembly.
+func GencodeVersionForAssembly(assembly string) string {
+	if strings.EqualFold(assembly, "GRCh37") {
+		return GencodeVersionGRCh37
 	}
+	return GencodeVersionGRCh38
+}
+
+// getGENCODEURLs returns the GTF and FASTA URLs for the given assembly.
+// GRCh37 uses native GENCODE v19 (not liftover), GRCh38 uses GENCODE v45.
+func getGENCODEURLs(assembly string) (gtfURL, fastaURL string) {
+	ver := GencodeVersionForAssembly(assembly)
+	release := strings.TrimPrefix(ver, "v")
+	base := fmt.Sprintf("%s/release_%s", gencodeBase, release)
+
+	gtfURL = fmt.Sprintf("%s/gencode.%s.annotation.gtf.gz", base, ver)
+	fastaURL = fmt.Sprintf("%s/gencode.%s.pc_transcripts.fa.gz", base, ver)
 	return
 }
 
@@ -104,7 +111,7 @@ func runDownload(logger *zap.Logger, assembly, outputDir string, gtfOnly bool) e
 
 	gtfURL, fastaURL := getGENCODEURLs(assembly)
 
-	fmt.Printf("Downloading GENCODE %s annotations for %s...\n", GencodeVersion, assembly)
+	fmt.Printf("Downloading GENCODE %s annotations for %s...\n", GencodeVersionForAssembly(assembly), assembly)
 	fmt.Printf("Destination: %s\n\n", destDir)
 
 	// Download GTF
@@ -306,30 +313,16 @@ func FindGENCODEFiles(assembly string) (gtfPath, fastaPath, canonicalPath string
 		return "", "", "", false
 	}
 
-	// Look for GTF file
-	assemblyLower := strings.ToLower(assembly)
-	var gtfPattern string
-	if assemblyLower == "grch37" {
-		gtfPattern = "gencode.v*lift37.annotation.gtf.gz"
-	} else {
-		gtfPattern = "gencode.v*.annotation.gtf.gz"
-	}
-
-	matches, err := filepath.Glob(filepath.Join(dir, gtfPattern))
+	// Look for GTF file (both assemblies use gencode.v*.annotation.gtf.gz now)
+	matches, err := filepath.Glob(filepath.Join(dir, "gencode.v*.annotation.gtf.gz"))
 	if err != nil || len(matches) == 0 {
 		return "", "", "", false
 	}
 	gtfPath = matches[0]
 
 	// Look for FASTA file
-	var fastaPattern string
-	if assemblyLower == "grch37" {
-		fastaPattern = "gencode.v*lift37.pc_transcripts.fa.gz"
-	} else {
-		fastaPattern = "gencode.v*.pc_transcripts.fa.gz"
-	}
 
-	matches, err = filepath.Glob(filepath.Join(dir, fastaPattern))
+	matches, err = filepath.Glob(filepath.Join(dir, "gencode.v*.pc_transcripts.fa.gz"))
 	if err == nil && len(matches) > 0 {
 		fastaPath = matches[0]
 	}
