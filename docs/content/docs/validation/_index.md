@@ -1,7 +1,7 @@
 ---
 title: Validation
 description: Validation methodology and results against TCGA datasets.
-weight: 5
+weight: 3
 ---
 
 ## How Validation Works

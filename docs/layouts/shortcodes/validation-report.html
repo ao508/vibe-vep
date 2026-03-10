@@ -16,47 +16,10 @@
   Workers: {{ $data.workers }} (GOMAXPROCS)
 </p>
 
-{{/* Generic table renderer */}}
-{{ define "validation-table" }}
-  {{ $table := .table }}
-  {{ $caption := .caption }}
-  <h3>{{ $caption }}</h3>
-  <div class="table-responsive">
-    <table class="table validation-table">
-      <thead>
-        <tr>
-          {{ range $i, $col := $table.columns }}
-            {{ $align := index $table.align $i }}
-            <th style="text-align: {{ $align }}">{{ $col }}</th>
-          {{ end }}
-        </tr>
-      </thead>
-      <tbody>
-        {{ range $table.rows }}
-          <tr>
-            {{ range $i, $val := . }}
-              {{ $align := index $table.align $i }}
-              <td style="text-align: {{ $align }}">{{ $val }}</td>
-            {{ end }}
-          </tr>
-        {{ end }}
-        {{ with $table.totals }}
-          <tr class="totals-row">
-            {{ range $i, $val := . }}
-              {{ $align := index $table.align $i }}
-              <td style="text-align: {{ $align }}"><strong>{{ $val }}</strong></td>
-            {{ end }}
-          </tr>
-        {{ end }}
-      </tbody>
-    </table>
-  </div>
-{{ end }}
-
-{{ template "validation-table" (dict "table" $data.match_rates "caption" "Match Rates") }}
+{{ partial "validation-table.html" (dict "table" $data.match_rates "caption" "Match Rates") }}
 
 {{ range $name, $table := $data.category_breakdowns }}
-  {{ template "validation-table" (dict "table" $table "caption" (printf "%s Category Breakdown" $name)) }}
+  {{ partial "validation-table.html" (dict "table" $table "caption" (printf "%s Category Breakdown" $name)) }}
 {{ end }}
 
 {{ with $data.cancer_genes }}
@@ -88,6 +51,6 @@
   {{ end }}
 {{ end }}
 
-{{ template "validation-table" (dict "table" $data.performance "caption" "Performance") }}
+{{ partial "validation-table.html" (dict "table" $data.performance "caption" "Performance") }}
 
 {{ end }}
