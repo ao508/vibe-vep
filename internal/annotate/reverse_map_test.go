@@ -204,6 +204,79 @@ func TestReverseMapHGVSc_ByTranscriptID(t *testing.T) {
 	assert.Equal(t, int64(25245350), v.Pos)
 }
 
+func TestReverseMapHGVSc_SingleBaseDel(t *testing.T) {
+	c := createKRASCache()
+
+	// KRAS c.34del: CDS pos 34 is 'G' (first base of codon 12 GGT)
+	// Reverse strand: genomic pos for CDS 34 = 25245351
+	// Padding base from CDS pos 35 ('G'), complement = 'C', at genomic 25245350
+	// Deleted base 'G' complemented = 'C'
+	// VCF: pos=25245350, ref=CC, alt=C
+	variants, err := ReverseMapHGVSc(c, "KRAS", "34del")
+	require.NoError(t, err)
+	require.Len(t, variants, 1)
+
+	v := variants[0]
+	assert.Equal(t, "12", v.Chrom)
+	assert.Equal(t, int64(25245350), v.Pos)
+	assert.Equal(t, "CC", v.Ref)
+	assert.Equal(t, "C", v.Alt)
+}
+
+func TestReverseMapHGVSc_RangeDel(t *testing.T) {
+	c := createKRASCache()
+
+	// KRAS c.34_36del: CDS positions 34-36 are 'GGT' (codon 12, Gly)
+	// Reverse strand: genomic for CDS 34 = 25245351, CDS 36 = 25245349
+	// Padding from CDS pos 37 ('G'), complement = 'C', at genomic 25245348
+	// Deleted 'GGT' reverse-complemented = 'ACC'
+	// VCF: pos=25245348, ref=CACC, alt=C
+	variants, err := ReverseMapHGVSc(c, "KRAS", "34_36del")
+	require.NoError(t, err)
+	require.Len(t, variants, 1)
+
+	v := variants[0]
+	assert.Equal(t, "12", v.Chrom)
+	assert.Equal(t, int64(25245348), v.Pos)
+	assert.Equal(t, "CACC", v.Ref)
+	assert.Equal(t, "C", v.Alt)
+}
+
+func TestReverseMapHGVSc_ForwardStrandDel(t *testing.T) {
+	// Forward strand transcript with known CDS sequence
+	c := cache.New()
+	c.AddTranscript(&cache.Transcript{
+		ID:       "ENST_FWD",
+		GeneName: "FWD_GENE",
+		Chrom:    "1",
+		Start:    1000,
+		End:      2000,
+		Strand:   1,
+		Biotype:  "protein_coding",
+		CDSStart: 1010,
+		CDSEnd:   1180,
+		Exons: []cache.Exon{
+			{Number: 1, Start: 1000, End: 1100, CDSStart: 1010, CDSEnd: 1100, Frame: 0},
+			{Number: 2, Start: 1150, End: 1200, CDSStart: 1150, CDSEnd: 1180, Frame: 1},
+		},
+		CDSSequence: "ATGACTGAATATAAACTTGTGGTAGTTGGAGCTGGTGGCGTAGGCAAGAGTGCCTTGACGATACAGCTAATTCAGAATCATTTTGTGGAC",
+	})
+
+	// c.5del: CDS pos 5 is 'C' (0-indexed pos 4 of "ATGAC...")
+	// Forward strand: genomic for CDS 5 = 1014
+	// Padding from CDS pos 4 ('A') at genomic 1013
+	// VCF: pos=1013, ref=AC, alt=A
+	variants, err := ReverseMapHGVSc(c, "FWD_GENE", "5del")
+	require.NoError(t, err)
+	require.Len(t, variants, 1)
+
+	v := variants[0]
+	assert.Equal(t, "1", v.Chrom)
+	assert.Equal(t, int64(1013), v.Pos)
+	assert.Equal(t, "AC", v.Ref)
+	assert.Equal(t, "A", v.Alt)
+}
+
 func TestFindTranscriptsByGene(t *testing.T) {
 	c := createKRASCache()
 

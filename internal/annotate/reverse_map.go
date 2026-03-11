@@ -108,32 +108,33 @@ func reverseMapProtein(t *cache.Transcript, refAA byte, protPos int64, altAA byt
 	return variants, nil
 }
 
-// reCDSChange parses a CDS change like "35G>T" or "100del" or "100_102del".
-// For now we support simple substitutions: position + ref > alt.
+// reCDSChange parses a simple CDS substitution like "35G>T".
 var reCDSChange = regexp.MustCompile(`^(\d+)([ACGT])>([ACGT])$`)
 
-// ReverseMapHGVSc maps an HGVSc notation (e.g. KRAS c.35G>T) back to a
-// genomic variant using the transcript's CDS-to-genomic mapping.
+// reCDSDeletion parses a CDS deletion like "923del" or "100_102del".
+var reCDSDeletion = regexp.MustCompile(`^(\d+)(?:_(\d+))?del$`)
+
+// ReverseMapHGVSc maps an HGVSc notation (e.g. KRAS c.35G>T or KRAS c.34del)
+// back to a genomic variant using the transcript's CDS-to-genomic mapping.
 func ReverseMapHGVSc(c *cache.Cache, geneOrTranscript string, cdsChange string) ([]*vcf.Variant, error) {
-	// Parse the CDS change
-	m := reCDSChange.FindStringSubmatch(cdsChange)
-	if m == nil {
-		return nil, fmt.Errorf("unsupported CDS change notation %q (only simple substitutions like 35G>T are supported)", cdsChange)
+	// Try substitution first
+	if m := reCDSChange.FindStringSubmatch(cdsChange); m != nil {
+		return reverseMapHGVScSubstitution(c, geneOrTranscript, m)
 	}
 
-	cdsPos, _ := strconv.ParseInt(m[1], 10, 64)
-	cdsRef := m[2]
-	cdsAlt := m[3]
+	// Try deletion
+	if m := reCDSDeletion.FindStringSubmatch(cdsChange); m != nil {
+		return reverseMapHGVScDeletion(c, geneOrTranscript, m)
+	}
 
-	// Find the transcript
-	var transcript *cache.Transcript
+	return nil, fmt.Errorf("unsupported CDS change notation %q (supported: substitutions like 35G>T, deletions like 923del or 100_102del)", cdsChange)
+}
 
-	// Check if it looks like a transcript ID (starts with ENST)
+// findHGVScTranscript resolves a gene name or transcript ID to a transcript.
+func findHGVScTranscript(c *cache.Cache, geneOrTranscript string) (*cache.Transcript, error) {
 	if strings.HasPrefix(geneOrTranscript, "ENST") {
-		// Try exact match first, then try with version stripped
-		transcript = c.GetTranscript(geneOrTranscript)
+		transcript := c.GetTranscript(geneOrTranscript)
 		if transcript == nil {
-			// Try matching without version suffix
 			transcripts := findTranscriptByPrefix(c, geneOrTranscript)
 			if len(transcripts) > 0 {
 				transcript = transcripts[0]
@@ -142,29 +143,35 @@ func ReverseMapHGVSc(c *cache.Cache, geneOrTranscript string, cdsChange string) 
 		if transcript == nil {
 			return nil, fmt.Errorf("transcript %q not found", geneOrTranscript)
 		}
-	} else {
-		// Treat as gene name, find canonical
-		transcripts := c.FindTranscriptsByGene(geneOrTranscript)
-		if len(transcripts) == 0 {
-			return nil, fmt.Errorf("gene %q not found in transcript cache", geneOrTranscript)
+		return transcript, nil
+	}
+
+	transcripts := c.FindTranscriptsByGene(geneOrTranscript)
+	if len(transcripts) == 0 {
+		return nil, fmt.Errorf("gene %q not found in transcript cache", geneOrTranscript)
+	}
+	for _, t := range transcripts {
+		if t.IsCanonicalMSK && t.IsProteinCoding() {
+			return t, nil
 		}
-		for _, t := range transcripts {
-			if t.IsCanonicalMSK && t.IsProteinCoding() {
-				transcript = t
-				break
-			}
+	}
+	for _, t := range transcripts {
+		if t.IsProteinCoding() {
+			return t, nil
 		}
-		if transcript == nil {
-			for _, t := range transcripts {
-				if t.IsProteinCoding() {
-					transcript = t
-					break
-				}
-			}
-		}
-		if transcript == nil {
-			return nil, fmt.Errorf("no protein-coding transcript found for gene %q", geneOrTranscript)
-		}
+	}
+	return nil, fmt.Errorf("no protein-coding transcript found for gene %q", geneOrTranscript)
+}
+
+// reverseMapHGVScSubstitution handles simple CDS substitutions like "35G>T".
+func reverseMapHGVScSubstitution(c *cache.Cache, geneOrTranscript string, m []string) ([]*vcf.Variant, error) {
+	cdsPos, _ := strconv.ParseInt(m[1], 10, 64)
+	cdsRef := m[2]
+	cdsAlt := m[3]
+
+	transcript, err := findHGVScTranscript(c, geneOrTranscript)
+	if err != nil {
+		return nil, err
 	}
 
 	// Verify CDS ref base
@@ -176,7 +183,6 @@ func ReverseMapHGVSc(c *cache.Cache, geneOrTranscript string, cdsChange string) 
 		}
 	}
 
-	// Map CDS position to genomic
 	genomicPos := CDSToGenomic(cdsPos, transcript)
 	if genomicPos == 0 {
 		return nil, fmt.Errorf("CDS position %d could not be mapped to genomic coordinates in transcript %s",
@@ -195,6 +201,89 @@ func ReverseMapHGVSc(c *cache.Cache, geneOrTranscript string, cdsChange string) 
 		Pos:   genomicPos,
 		Ref:   ref,
 		Alt:   alt,
+	}}, nil
+}
+
+// reverseMapHGVScDeletion handles CDS deletions like "923del" or "100_102del".
+func reverseMapHGVScDeletion(c *cache.Cache, geneOrTranscript string, m []string) ([]*vcf.Variant, error) {
+	cdsStart, _ := strconv.ParseInt(m[1], 10, 64)
+	cdsEnd := cdsStart
+	if m[2] != "" {
+		cdsEnd, _ = strconv.ParseInt(m[2], 10, 64)
+	}
+	if cdsEnd < cdsStart {
+		return nil, fmt.Errorf("invalid CDS deletion range: %d_%d", cdsStart, cdsEnd)
+	}
+
+	transcript, err := findHGVScTranscript(c, geneOrTranscript)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract deleted CDS bases
+	if cdsEnd > int64(len(transcript.CDSSequence)) {
+		return nil, fmt.Errorf("CDS position %d out of range for transcript %s (CDS length %d)",
+			cdsEnd, transcript.ID, len(transcript.CDSSequence))
+	}
+	deletedBases := transcript.CDSSequence[cdsStart-1 : cdsEnd]
+
+	// Map CDS positions to genomic
+	genomicStart := CDSToGenomic(cdsStart, transcript)
+	genomicEnd := CDSToGenomic(cdsEnd, transcript)
+	if genomicStart == 0 || genomicEnd == 0 {
+		return nil, fmt.Errorf("CDS positions %d-%d could not be mapped to genomic coordinates in transcript %s",
+			cdsStart, cdsEnd, transcript.ID)
+	}
+
+	// Build VCF-convention deletion (padding base + deleted bases)
+	if transcript.IsReverseStrand() {
+		// Reverse strand: genomicStart > genomicEnd (reversed coords)
+		// Deleted bases on genomic strand are reverse-complemented
+		// Padding base is after the deletion in genomic coords (genomicEnd+1 is upstream)
+		// but VCF convention uses the base before the deletion in genomic order
+		// genomicEnd is the lower coordinate, so pad at genomicEnd-1
+		padPos := genomicEnd - 1
+		if padPos < 1 {
+			return nil, fmt.Errorf("cannot add padding base before genomic position %d", genomicEnd)
+		}
+		// Get padding base from the genomic strand
+		// On reverse strand, CDS pos before cdsStart maps to genomicStart+1
+		// But we need the genomic base at padPos, which is genomicEnd-1
+		// We can get it from CDS: the base after cdsEnd in CDS maps to genomicEnd-1 on reverse strand
+		padCDSPos := cdsEnd + 1
+		if padCDSPos > int64(len(transcript.CDSSequence)) {
+			return nil, fmt.Errorf("cannot determine padding base: CDS position %d out of range", padCDSPos)
+		}
+		padBase := string(Complement(transcript.CDSSequence[padCDSPos-1]))
+
+		// Deleted bases reverse-complemented for genomic strand
+		genomicDeleted := ReverseComplement(string(deletedBases))
+
+		return []*vcf.Variant{{
+			Chrom: transcript.Chrom,
+			Pos:   padPos,
+			Ref:   padBase + genomicDeleted,
+			Alt:   padBase,
+		}}, nil
+	}
+
+	// Forward strand: padding base is at genomicStart-1
+	padPos := genomicStart - 1
+	if padPos < 1 {
+		return nil, fmt.Errorf("cannot add padding base before genomic position %d", genomicStart)
+	}
+	// Get padding base from CDS (base before cdsStart)
+	padCDSPos := cdsStart - 1
+	if padCDSPos < 1 {
+		return nil, fmt.Errorf("cannot determine padding base: CDS position %d out of range", padCDSPos)
+	}
+	padBase := string(transcript.CDSSequence[padCDSPos-1])
+
+	return []*vcf.Variant{{
+		Chrom: transcript.Chrom,
+		Pos:   padPos,
+		Ref:   padBase + string(deletedBases),
+		Alt:   padBase,
 	}}, nil
 }
 
